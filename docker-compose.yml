@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: multichain_app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    environment:
+      # These variables are read from the .env.local file
+      - MYSQL_HOST=db
+      - MYSQL_PORT=${MYSQL_PORT}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY}
+    restart: always
+
+  db:
+    image: mysql:8.0
+    container_name: multichain_db
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: your_strong_root_password
+      MYSQL_DATABASE: vaultdb
+      MYSQL_USER: vaultuser
+      MYSQL_PASSWORD: vaultpassword
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # This line mounts the schema.sql file to the MySQL initialization directory.
+      # The database will be created and the table will be set up on the first run.
+      - ./backend/sql/schema.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+
+volumes:
+  mysql_data:
