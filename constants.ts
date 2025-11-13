@@ -10,7 +10,7 @@ export const WBTC_TOKEN_ADDRESS = '0xA02b9C28D949243772087d4993FB3A486dF98359';
 export const USDC_TOKEN_ADDRESS = '0xC26B8569f3081Dbb8087892CEFb9706fE423d207';
 
 // API Endpoints
-export const MEMPOOL_API_URL = 'https://mempool.space/testnet4/api';
+export const MEMPOOL_API_URL = 'https://blockstream.info/testnet/api';
 export const ETHERSCAN_API_URL = 'https://api-sepolia.etherscan.io/api';
 // This is now a server-side only environment variable.
 // It must be set in your deployment environment or in a .env.local file.

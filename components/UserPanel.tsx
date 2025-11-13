@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import type { BtcWalletState, EvmWalletState, TxProgress, Transaction } from '../types';
-import { LOCK_DURATIONS, FEE_RATE, MEMPOOL_API_URL, WBTC_TOKEN_ADDRESS, DURATION_LABELS, EVM_VAULT_ADDRESS, EVM_NETWORK_ID, FIVE_MINUTES_IN_DAYS } from '../constants';
+import { FEE_RATE, WBTC_TOKEN_ADDRESS, EVM_VAULT_ADDRESS, EVM_NETWORK_ID, FIVE_MINUTES_IN_DAYS } from '../constants';
 import { parseUnits } from 'ethers';
 import { getVaultAddresses, createTransaction, getTransactions } from '../services/api';
 import  wbtcAbi  from'../lib/assets/abi/TestWBTC.json';
@@ -11,13 +10,25 @@ import vaultAbi from '../lib/assets/abi/WbtcStaking.json';
 import { SpinnerIcon, CheckCircleIcon, XCircleIcon, ExternalLinkIcon, ClockIcon } from './icons';
 import { getBtcTx, getEvmTx } from '../services/explorer';
 
+const MEMPOOL_API_URL = 'https://mempool.space/testnet4/api';
+
 interface UserPanelProps {
   btcWalletState: BtcWalletState;
   evmWalletState: EvmWalletState;
-  onDisconnect: () => void;
+  setBtcWalletState: React.Dispatch<React.SetStateAction<BtcWalletState>>;
+  setEvmWalletState: React.Dispatch<React.SetStateAction<EvmWalletState>>;
 }
 
-const UserPanel: React.FC<UserPanelProps> = ({ btcWalletState, onDisconnect }) => {
+const LOCK_DURATIONS = [7, 30, 365, 730, 1095];
+const DURATION_LABELS: { [key: number]: string } = {
+  7: '7 Days',
+  30: '30 Days',
+  365: '1 Year',
+  730: '2 Years',
+  1095: '3 Years',
+};
+
+const UserPanel: React.FC<UserPanelProps> = ({ btcWalletState, evmWalletState, setBtcWalletState, setEvmWalletState }) => {
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
 
@@ -77,8 +88,8 @@ const UserPanel: React.FC<UserPanelProps> = ({ btcWalletState, onDisconnect }) =
       try {
           const allTxs = await getTransactions();
           const filteredTxs = allTxs.filter(tx => 
-              (btcWalletState.address && tx.userAddress.toLowerCase() === btcWalletState.address.toLowerCase()) &&
-              (evmAddress && tx.userEvmAddress.toLowerCase() === evmAddress.toLowerCase())
+              (btcWalletState.address && tx.userAddress?.toLowerCase() === btcWalletState.address.toLowerCase()) ||
+              (evmAddress && tx.userEvmAddress?.toLowerCase() === evmAddress.toLowerCase())
           );
           setUserTransactions(filteredTxs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
       } catch (err) {
@@ -117,14 +128,9 @@ const UserPanel: React.FC<UserPanelProps> = ({ btcWalletState, onDisconnect }) =
       }
     };
 
-    if (btcWalletState.connected || isEvmConnected) {
-      fetchBalances();
-    } else {
-      // Reset balances on disconnect
-      setBtcBalance('0');
-    }
+    fetchBalances();
 
-  }, [fetchUserTransactions]);
+  }, [fetchUserTransactions, btcWalletState.connected, isEvmConnected, btcWalletState.address]);
 
   useEffect(() => {
     if (isConfirming) {
@@ -276,150 +282,151 @@ const UserPanel: React.FC<UserPanelProps> = ({ btcWalletState, onDisconnect }) =
   const isWalletConnected = btcWalletState.connected && isEvmConnected;
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Staking Panel */}
-        <div className="lg:col-span-1">
-          <div className="bg-gray-800/50 backdrop-blur-md border border-white/10 rounded-xl shadow-lg p-6">
-            <h2 className="text-2xl font-bold mb-6 text-white">Stake Your Assets</h2>
-            
-            {/* Asset Selector */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-300 mb-2">Select Asset</label>
-              <div className="flex bg-gray-900/50 p-1 rounded-lg">
-                <button onClick={() => setSelectedAsset('tBTC')} className={`w-1/2 py-2 text-sm rounded-md transition-colors ${selectedAsset === 'tBTC' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}>
-                  tBTC
-                </button>
-                <button onClick={() => setSelectedAsset('wBTC')} className={`w-1/2 py-2 text-sm rounded-md transition-colors ${selectedAsset === 'wBTC' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}>
-                  wBTC
-                </button>
-              </div>
-            </div>
-
-            {/* Balances Display */}
-            <div className="mb-4 text-xs text-gray-400 space-y-1">
-              <div className="flex justify-between">
-                <span>Your tBTC Balance:</span>
-                <span className="font-mono">{loadingBalances ? '...' : `${parseFloat(btcBalance).toFixed(6)} tBTC`}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Your wBTC Balance:</span>
-                <span className="font-mono">{isMounted && isLoadingWbtcBalance ? '...' : `${wbtcBalanceData?.formatted.substring(0, 8) ?? '0.00'} wBTC`}</span>
-              </div>
-            </div>
-            {/* Amount Input */}
-            <div className="mb-4">
-              <label htmlFor="amount" className="block text-sm font-medium text-gray-300 mb-2">Amount to Stake</label>
-              <input 
-                type="number" 
-                id="amount"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00" 
-                className="w-full bg-black/20 border border-white/10 rounded-md px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* Lock Duration */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-300 mb-2">Lock Duration</label>
-              <div className="flex space-x-2">
-                {LOCK_DURATIONS.map(days => (
-                  <button key={days} onClick={() => setLockDuration(days)} className={`flex-1 py-2 text-sm rounded-md transition-all ${lockDuration === days ? 'bg-blue-600 text-white ring-2 ring-blue-400' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
-                    {DURATION_LABELS[days] || `${days} days`}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Stake Button */}
-            <button
-              onClick={handleStake}
-              disabled={!isWalletConnected || txProgress.status === 'pending' || txProgress.status === 'confirmed'}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800/50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 flex items-center justify-center"
-            >
-              {txProgress.status === 'pending' ? <SpinnerIcon className="animate-spin h-5 w-5 mr-2" /> : null}
-              {!isWalletConnected ? 'Connect Wallets to Stake' : 'Stake Now'}
-            </button>
-
-            {isWalletConnected && (
-              <button
-                onClick={onDisconnect}
-                className="w-full mt-3 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300 text-sm"
-              >
-                Disconnect Wallets
+    <div className="flex flex-wrap lg:flex-nowrap gap-8">
+      {/* Staking Panel */}
+      <div className="w-full lg:w-1/3">
+        <div className="card">
+          <h2 className="text-2xl font-bold mb-6">Stake Your Assets</h2>
+          
+          {/* Asset Selector */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Asset</label>
+            <div className="flex bg-gray-200 dark:bg-gray-900/50 p-1 rounded-lg">
+              <button onClick={() => setSelectedAsset('tBTC')} className={`w-1/2 py-2 text-sm rounded-md transition-colors ${selectedAsset === 'tBTC' ? 'bg-orange-500 text-white' : 'text-gray-500 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700'}`}>
+                tBTC
               </button>
-            )}
-
-            {error && <p className="text-red-400 text-sm mt-4 text-center">{error}</p>}
-            
-            {/* Transaction Progress */}
-            {txProgress.status !== 'idle' && (
-              <div className="mt-6 p-4 bg-black/20 rounded-lg border border-white/10">
-                <div className="flex items-center">
-                  {txProgress.status === 'pending' && <SpinnerIcon className="animate-spin h-5 w-5 mr-3 text-blue-400" />}
-                  {txProgress.status === 'confirmed' && <CheckCircleIcon className="h-5 w-5 mr-3 text-green-400" />}
-                  {txProgress.status === 'failed' && <XCircleIcon className="h-5 w-5 mr-3 text-red-400" />}
-                  <p className="text-sm">{txProgress.message}</p>
-                </div>
-                {txProgress.txId && txProgress.asset && (
-                  <a href={getExplorerUrl({txId: txProgress.txId, asset: txProgress.asset})} target="_blank" rel="noopener noreferrer" className="text-blue-400 text-xs mt-2 hover:underline flex items-center">
-                    View on explorer <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                  </a>
-                )}
-              </div>
-            )}
+              <button onClick={() => setSelectedAsset('wBTC')} className={`w-1/2 py-2 text-sm rounded-md transition-colors ${selectedAsset === 'wBTC' ? 'bg-orange-500 text-white' : 'text-gray-500 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700'}`}>
+                wBTC
+              </button>
+            </div>
           </div>
-        </div>
 
-        {/* User Transactions */}
-        <div className="lg:col-span-2">
-           <div className="bg-gray-800/50 backdrop-blur-md border border-white/10 rounded-xl shadow-lg overflow-hidden">
-             <h3 className="text-xl font-bold p-6 text-white">Your Stakes</h3>
-             <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-300">
-                    <thead className="text-xs text-gray-400 uppercase bg-gray-900/50">
-                        <tr>
-                            <th scope="col" className="px-6 py-3">Asset</th>
-                            <th scope="col" className="px-6 py-3">Amount</th>
-                            <th scope="col" className="px-6 py-3">Date</th>
-                            <th scope="col" className="px-6 py-3">Duration</th>
-                            <th scope="col" className="px-6 py-3">Dividend Status</th>
-                            <th scope="col" className="px-6 py-3">Tx</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loadingTxs ? (
-                          <tr><td colSpan={6} className="text-center py-8">Loading your transactions...</td></tr>
-                        ) : userTransactions.length > 0 ? (
-                            userTransactions.map(tx => (
-                                <tr key={tx.id} className="border-b border-gray-700 hover:bg-gray-700/50 transition-colors">
-                                    <td className="px-6 py-4 font-semibold">{tx.asset}</td>
-                                    <td className="px-6 py-4">{tx.amount}</td>
-                                    <td className="px-6 py-4">{new Date(tx.timestamp).toLocaleDateString()}</td>
-                                    <td className="px-6 py-4">{DURATION_LABELS[tx.lockDurationDays] || `${tx.lockDurationDays} days`}</td>
-                                    <td className="px-6 py-4">
-                                        {tx.claimed ? (
-                                            <span className="flex items-center text-green-400"><CheckCircleIcon className="h-4 w-4 mr-1" /> Claimed</span>
-                                        ) : (
-                                            <span className="flex items-center text-yellow-400"><ClockIcon className="h-4 w-4 mr-1" /> Pending</span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <a href={getExplorerUrl(tx)} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">
-                                            <ExternalLinkIcon className="h-4 w-4" />
-                                        </a>
-                                    </td>
-                                </tr>
-                            ))
-                        ) : (
-                           <tr><td colSpan={6} className="text-center py-8">You have no staking history.</td></tr>
-                        )}
-                    </tbody>
-                </table>
+          {/* Balances Display */}
+          <div className="mb-4 text-xs text-gray-500 dark:text-gray-400 space-y-1">
+            <div className="flex justify-between">
+              <span>Your tBTC Balance:</span>
+              <span className="font-mono">{loadingBalances ? '...' : `${parseFloat(btcBalance).toFixed(6)} tBTC`}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Your wBTC Balance:</span>
+              <span className="font-mono">{isMounted && isLoadingWbtcBalance ? '...' : `${wbtcBalanceData?.formatted.substring(0, 8) ?? '0.00'} wBTC`}</span>
+            </div>
+          </div>
+          {/* Amount Input */}
+          <div className="mb-4">
+            <label htmlFor="amount" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Amount to Stake</label>
+            <input 
+              type="number" 
+              id="amount"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00" 
+              className="w-full bg-gray-100 dark:bg-black/20 border border-gray-300 dark:border-white/10 rounded-md px-3 py-2 text-gray-700 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+          </div>
+
+          {/* Lock Duration */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Lock Duration</label>
+            <div className="flex space-x-2">
+              {LOCK_DURATIONS.map(days => (
+                <button key={days} onClick={() => setLockDuration(days)} className={`flex-1 py-2 text-sm rounded-md transition-all ${lockDuration === days ? 'bg-orange-500 text-white ring-2 ring-orange-400' : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                  {DURATION_LABELS[days] || `${days} days`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Stake Button */}
+          <button
+            onClick={handleStake}
+            disabled={!isWalletConnected || txProgress.status === 'pending' || txProgress.status === 'confirmed'}
+            className="w-full btn-primary flex items-center justify-center"
+          >
+            {txProgress.status === 'pending' ? <SpinnerIcon className="animate-spin h-5 w-5 mr-2" /> : null}
+            {!isWalletConnected ? 'Connect Wallets to Stake' : 'Stake Now'}
+          </button>
+
+          {isWalletConnected && (
+            <button
+              onClick={() => {
+                setBtcWalletState({ connected: false, address: null });
+                setEvmWalletState({ connected: false, address: null });
+              }}
+              className="w-full mt-3 btn-secondary"
+            >
+              Disconnect Wallets
+            </button>
+          )}
+
+          {error && <p className="text-red-400 text-sm mt-4 text-center">{error}</p>}
+          
+          {/* Transaction Progress */}
+          {txProgress.status !== 'idle' && (
+            <div className="mt-6 p-4 bg-gray-100 dark:bg-black/20 rounded-lg border border-gray-300 dark:border-white/10">
+              <div className="flex items-center">
+                {txProgress.status === 'pending' && <SpinnerIcon className="animate-spin h-5 w-5 mr-3 text-orange-500" />}
+                {txProgress.status === 'confirmed' && <CheckCircleIcon className="h-5 w-5 mr-3 text-green-400" />}
+                {txProgress.status === 'failed' && <XCircleIcon className="h-5 w-5 mr-3 text-red-400" />}
+                <p className="text-sm text-gray-700 dark:text-white">{txProgress.message}</p>
               </div>
-           </div>
+              {txProgress.txId && txProgress.asset && (
+                <a href={getExplorerUrl({txId: txProgress.txId, asset: txProgress.asset})} target="_blank" rel="noopener noreferrer" className="text-orange-500 text-xs mt-2 hover:underline flex items-center">
+                  View on explorer <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                </a>
+              )}
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* User Transactions */}
+      <div className="w-full lg:w-2/3">
+         <div className="card">
+           <h3 className="text-xl font-bold mb-6">Your Stakes</h3>
+           <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left text-gray-500 dark:text-gray-300">
+                  <thead className="text-xs text-gray-700 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-900/50">
+                      <tr>
+                          <th scope="col" className="px-6 py-3">Asset</th>
+                          <th scope="col" className="px-6 py-3">Amount</th>
+                          <th scope="col" className="px-6 py-3">Date</th>
+                          <th scope="col" className="px-6 py-3">Duration</th>
+                          <th scope="col" className="px-6 py-3">Dividend Status</th>
+                          <th scope="col" className="px-6 py-3">Tx</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      {loadingTxs ? (
+                        <tr><td colSpan={6} className="text-center py-8">Loading your transactions...</td></tr>
+                      ) : userTransactions.length > 0 ? (
+                          userTransactions.map(tx => (
+                              <tr key={tx.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                                  <td className="px-6 py-4 font-semibold">{tx.asset}</td>
+                                  <td className="px-6 py-4">{tx.amount}</td>
+                                  <td className="px-6 py-4">{new Date(tx.timestamp).toLocaleDateString()}</td>
+                                  <td className="px-6 py-4">{DURATION_LABELS[tx.lockDurationDays] || `${tx.lockDurationDays} days`}</td>
+                                  <td className="px-6 py-4">
+                                      {tx.claimed ? (
+                                          <span className="flex items-center text-green-400"><CheckCircleIcon className="h-4 w-4 mr-1" /> Claimed</span>
+                                      ) : (
+                                          <span className="flex items-center text-yellow-400"><ClockIcon className="h-4 w-4 mr-1" /> Pending</span>
+                                      )}
+                                  </td>
+                                  <td className="px-6 py-4">
+                                      <a href={getExplorerUrl(tx)} target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:text-orange-400">
+                                          <ExternalLinkIcon className="h-4 w-4" />
+                                      </a>
+                                  </td>
+                              </tr>
+                          ))
+                      ) : (
+                         <tr><td colSpan={6} className="text-center py-8">You have no staking history.</td></tr>
+                      )}
+                  </tbody>
+              </table>
+            </div>
+         </div>
       </div>
     </div>
   );

@@ -1,21 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { Transaction } from '../types';
 import { claimDividends, getTransactions } from '../services/api';
 import ClaimModal from './ClaimModal';
-import { CheckCircleIcon, ClockIcon, ExternalLinkIcon } from './icons';
-import { MEMPOOL_API_URL } from '../constants';
+import { CheckCircleIcon, ClockIcon, ExternalLinkIcon } from './icons';;
 import { formatLargeNumber, getDurationLabel } from '../lib/format';
 import { useWriteContract } from 'wagmi';
 import vaultAbi from '../lib/assets/abi/WbtcStaking.json';
 import { EVM_VAULT_ADDRESS } from '../constants';
+import { useAccount } from 'wagmi';
+import { ADMIN_WALLETS } from '../lib/admin';
+
+const MEMPOOL_API_URL = 'https://mempool.space/testnet4/api';
 
 const AdminPanel: React.FC = () => {
+  const { address } = useAccount();
+
+  const isAdmin = address && ADMIN_WALLETS.includes(address.toLowerCase());
+
+  if (!isAdmin) {
+    return (
+      <div className="text-center py-10">
+        <h2 className="text-2xl font-bold">Unauthorized Access</h2>
+        <p className="text-foreground/70 dark:text-foreground-dark/70">You are not authorized to view this page. Please connect with an admin wallet.</p>
+      </div>
+    );
+  }
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [isClaiming, setIsClaiming] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const { writeContractAsync: buyBackWbtc } = useWriteContract();
 
   const fetchTransactions = async () => {
@@ -24,7 +40,7 @@ const AdminPanel: React.FC = () => {
       const data = await getTransactions();
       setTransactions(data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     } catch (e: any) {
-      setError('Failed to fetch transactions.');
+      setError(e.message || 'Failed to fetch transactions.');
       console.error(e);
     } finally {
       setLoading(false);
@@ -139,99 +155,123 @@ const AdminPanel: React.FC = () => {
     return tx.status.confirmed && !tx.claimed;
   };
 
+  const filteredTransactions = useMemo(() => {
+    if (!searchQuery) {
+      return transactions;
+    }
+    const lowercasedQuery = searchQuery.toLowerCase();
+    return transactions.filter(tx =>
+      tx.userAddress?.toLowerCase().includes(lowercasedQuery) ||
+      tx.userEvmAddress?.toLowerCase().includes(lowercasedQuery) ||
+      tx.txId.toLowerCase().includes(lowercasedQuery)
+    );
+  }, [transactions, searchQuery]);
+
   if (loading) return <div className="text-center py-4">Loading transactions...</div>;
   if (error) return <div className="text-center py-4 text-red-500">Error: {error}</div>;
 
   return (
-    <div className="container mx-auto p-4">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-white">Admin Dashboard</h2>
+    <div className="card">
+      <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
+        <h2 className="text-3xl font-bold">Admin Dashboard</h2>
+        <div className="relative w-full sm:w-auto flex-grow sm:flex-grow-0">
+          <input
+            type="text"
+            placeholder="Search by address or TxID..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-4 pr-10 py-2 rounded-full bg-accent/50 dark:bg-accent-dark/20 border border-transparent focus:ring-2 focus:ring-primary-dark focus:outline-none"
+          />
+        </div>
         <div className="flex space-x-2">
           <button
             onClick={handleRefreshPrices}
             disabled={isRefreshing}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800/50 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+            className="btn-secondary"
           >
             {isRefreshing ? 'Refreshing...' : 'Refresh Prices'}
           </button>
           <button
             onClick={handleUpdateStatuses}
             disabled={isRefreshing}
-            className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800/50 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+            className="btn-primary"
           >
             {isRefreshing ? 'Updating...' : 'Refresh Statuses'}
           </button>
         </div>
       </div>
       <div className="overflow-x-auto">
-        <div className="bg-gray-800/50 backdrop-blur-md border border-white/10 rounded-xl shadow-lg overflow-hidden">
-          <table className="w-full text-sm text-left text-gray-300">
-            <thead className="text-xs text-gray-400 uppercase bg-gray-900/50">
-              <tr>
-                <th scope="col" className="px-6 py-3">User</th>
-                <th scope="col" className="px-6 py-3">Asset</th>
-                <th scope="col" className="px-6 py-3">Amount</th>
-                <th scope="col" className="px-6 py-3">BTC Price @ Tx</th>
-                <th scope="col" className="px-6 py-3">Stake Date</th>
-                <th scope="col" className="px-6 py-3">Duration</th>
-                <th scope="col" className="px-6 py-3">Confirmation Status</th>
-                <th scope="col" className="px-6 py-3">Action</th>
+        <table className="w-full text-sm text-left text-foreground/80 dark:text-foreground-dark/80">
+          <thead className="text-xs text-foreground/70 dark:text-foreground-dark/70 uppercase bg-accent/50 dark:bg-accent-dark/20">
+            <tr>
+              <th scope="col" className="px-6 py-3">User</th>
+              <th scope="col" className="px-6 py-3">Asset</th>
+              <th scope="col" className="px-6 py-3">Amount</th>
+              <th scope="col" className="px-6 py-3">BTC Price @ Tx</th>
+              <th scope="col" className="px-6 py-3">Stake Date</th>
+              <th scope="col" className="px-6 py-3">Duration</th>
+              <th scope="col" className="px-6 py-3">Confirmation Status</th>
+              <th scope="col" className="px-6 py-3">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredTransactions.length > 0 ? (
+              filteredTransactions.map((tx) => (
+              <tr key={tx.id} className="border-b border-accent dark:border-accent-dark hover:bg-accent/50 dark:hover:bg-accent-dark/20 transition-colors">
+                <td className="px-6 py-4 font-mono text-xs" title={tx.userAddress}>
+                  <div className="flex items-center">
+                    <span>{`${tx.userAddress.substring(0, 10)}...${tx.userAddress.substring(tx.userAddress.length - 4)}`}</span>
+                    <a href={getExplorerUrl(tx)} target="_blank" rel="noopener noreferrer" className="ml-2 text-orange-500 hover:text-orange-400">
+                      <ExternalLinkIcon className="h-4 w-4" />
+                    </a>
+                  </div>
+                </td>
+                <td className="px-6 py-4">{tx.asset}</td>
+                <td className="px-6 py-4">{tx.amount}</td>
+                <td className="px-6 py-4 font-mono">
+                  ${tx.btcPriceAtTx > 0 ? formatLargeNumber(tx.btcPriceAtTx) : 'N/A'}
+                </td>
+                <td className="px-6 py-4">{new Date(tx.timestamp).toLocaleDateString()}</td>
+                <td className="px-6 py-4">{getDurationLabel(tx.lockDurationDays)}</td>
+                <td className="px-6 py-4">
+                  {tx.status.confirmed ? (
+                    <span className="flex items-center text-green-400"><CheckCircleIcon className="h-4 w-4 mr-1" /> Confirmed</span>
+                  ) : (
+                    <span className="flex items-center text-yellow-400"><ClockIcon className="h-4 w-4 mr-1" /> Pending</span>
+                  )}
+                </td>
+                <td className="px-6 py-4">
+                  {(() => {
+                    if (tx.claimed) {
+                      return <button disabled className="bg-gray-400 dark:bg-gray-600 text-white font-bold py-1 px-3 text-xs rounded-md cursor-not-allowed">Done</button>;
+                    }
+                    if (!tx.status.confirmed) { // Common for both
+                      return <button disabled className="bg-gray-400 dark:bg-gray-600 text-white font-bold py-1 px-3 text-xs rounded-md cursor-not-allowed">Pending</button>;
+                    }
+                    if (tx.asset === 'wBTC') {
+                      return (
+                        <button onClick={() => setSelectedTx(tx)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 text-xs rounded-md transition-colors">
+                          Buy Back
+                        </button>
+                      );
+                    }
+                    // For tBTC
+                    if (isLockPeriodOver(tx)) {
+                      return <button onClick={() => setSelectedTx(tx)} className="bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 text-xs rounded-md transition-colors">Distribute</button>;
+                    } else {
+                      return <button onClick={() => setSelectedTx(tx)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-1 px-3 text-xs rounded-md transition-colors">Buy Back</button>;
+                    }
+                  })()}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {transactions.map((tx) => (
-                <tr key={tx.id} className="border-b border-gray-700 hover:bg-gray-700/50 transition-colors">
-                  <td className="px-6 py-4 font-mono text-xs" title={tx.userAddress}>
-                    <div className="flex items-center">
-                      <span>{`${tx.userAddress.substring(0, 10)}...${tx.userAddress.substring(tx.userAddress.length - 4)}`}</span>
-                      <a href={getExplorerUrl(tx)} target="_blank" rel="noopener noreferrer" className="ml-2 text-blue-400 hover:text-blue-300">
-                        <ExternalLinkIcon className="h-4 w-4" />
-                      </a>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">{tx.asset}</td>
-                  <td className="px-6 py-4">{tx.amount}</td>
-                  <td className="px-6 py-4 font-mono">
-                    ${tx.btcPriceAtTx > 0 ? formatLargeNumber(tx.btcPriceAtTx) : 'N/A'}
-                  </td>
-                  <td className="px-6 py-4">{new Date(tx.timestamp).toLocaleDateString()}</td>
-                  <td className="px-6 py-4">{getDurationLabel(tx.lockDurationDays)}</td>
-                  <td className="px-6 py-4">
-                    {tx.status.confirmed ? (
-                      <span className="flex items-center text-green-400"><CheckCircleIcon className="h-4 w-4 mr-1" /> Confirmed</span>
-                    ) : (
-                      <span className="flex items-center text-yellow-400"><ClockIcon className="h-4 w-4 mr-1" /> Pending</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {(() => {
-                      if (tx.claimed) {
-                        return <button disabled className="bg-gray-600 text-white font-bold py-1 px-3 text-xs rounded-md">Done</button>;
-                      }
-                      if (!tx.status.confirmed) { // Common for both
-                        return <button disabled className="bg-gray-600 text-white font-bold py-1 px-3 text-xs rounded-md">Pending</button>;
-                      }
-                      if (tx.asset === 'wBTC') {
-                        return (
-                          <button onClick={() => setSelectedTx(tx)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-1 px-3 text-xs rounded-md transition-colors">
-                            Buy Back
-                          </button>
-                        );
-                      }
-                      // For tBTC
-                      if (isLockPeriodOver(tx)) {
-                        return <button onClick={() => setSelectedTx(tx)} className="bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 text-xs rounded-md transition-colors">Distribute</button>;
-                      } else {
-                        // Early buy-back for tBTC is also handled by the same modal logic
-                        return <button onClick={() => setSelectedTx(tx)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-1 px-3 text-xs rounded-md transition-colors">Buy</button>;
-                      }
-                    })()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))
+            ) : (
+              <tr>
+                <td colSpan={8} className="text-center py-8 text-foreground/70 dark:text-foreground-dark/70">No transactions found.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
       {selectedTx && (
         <ClaimModal

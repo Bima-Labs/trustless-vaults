@@ -18,8 +18,6 @@ const mapDbRowToTransaction = (row: RowDataPacket): Transaction => {
     network: row.network,
     btcPriceAtTx: parseFloat(row.btc_price_at_tx),
     status: {
-      // @ts-ignore
-      stakeId: row.stake_id,
       confirmed: !!row.status_confirmed,
     },
   };
@@ -56,7 +54,7 @@ export const getTransactions = async (): Promise<Transaction[]> => {
     JOIN users u ON b.user_id = u.id
     UNION ALL
     SELECT 
-      'wbtc' as type, w.id, u.btc_address as user_address, u.evm_address as user_evm_address, w.lock_duration_days, w.timestamp, w.claimed, w.tx_id, w.amount, 'wBTC' as asset, 'EVM Testnet' as network, w.confirmed as status_confirmed, w.btc_price_at_tx, w.claimed_at, w.stake_id
+      'wbtc' as type, w.id, u.btc_address as user_address, u.evm_address as user_evm_address, w.lock_duration_days, w.timestamp, w.claimed, w.tx_id, w.amount, 'wBTC' as asset, 'EVM Testnet' as network, w.confirmed as status_confirmed, w.btc_price_at_tx, w.claimed_at
     FROM wbtc_transactions w
     JOIN users u ON w.user_id = u.id 
     ORDER BY timestamp DESC;
@@ -76,8 +74,6 @@ export const getTransactions = async (): Promise<Transaction[]> => {
     network: row.network,
     btcPriceAtTx: parseFloat(row.btc_price_at_tx),
     status: {
-      // @ts-ignore
-      stakeId: row.stake_id,
       confirmed: !!row.status_confirmed,
     },
   }));
@@ -116,8 +112,6 @@ export const getTransactionById = async (id: string): Promise<Transaction | null
     network: network,
     btcPriceAtTx: parseFloat(row.btc_price_at_tx),
     status: {
-      // @ts-ignore
-      stakeId: row.stake_id,
       confirmed: !!row.confirmed,
     },
   };
@@ -130,7 +124,7 @@ export const addTransaction = async (txData: Omit<Transaction, 'id' | 'timestamp
   const btcPriceAtTx = await getBtcPriceInUsd();
 
   const tableName = asset === 'tBTC' ? 'btc_transactions' : 'wbtc_transactions';
-  const sql = `INSERT INTO ${tableName} (user_id, tx_id, amount, lock_duration_days, confirmed, btc_price_at_tx, stake_id) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+  const sql = `INSERT INTO ${tableName} (user_id, tx_id, amount, lock_duration_days, confirmed, btc_price_at_tx) VALUES (?, ?, ?, ?, ?, ?)`;
   const result = await query<ResultSetHeader>(sql, [
     userId,
     txId,
@@ -138,7 +132,6 @@ export const addTransaction = async (txData: Omit<Transaction, 'id' | 'timestamp
     lockDurationDays,
     status.confirmed,
     btcPriceAtTx, // This will be 0 for wBTC as it's fetched later or not applicable
-    status.stakeId ?? null // Correctly use status.stakeId
   ]);
   
   const newTxId = `${asset === 'tBTC' ? 'btc' : 'wbtc'}-${result.insertId}`;
@@ -158,7 +151,7 @@ export const getUnconfirmedTransactions = async (): Promise<Transaction[]> => {
     WHERE b.confirmed = FALSE
     UNION ALL 
     SELECT
-      'wbtc' as type, w.id, u.btc_address as user_address, u.evm_address as user_evm_address, w.lock_duration_days, w.timestamp, w.claimed, w.tx_id, w.amount, 'wBTC' as asset, 'EVM Testnet' as network, w.confirmed as status_confirmed, w.btc_price_at_tx, w.claimed_at, w.stake_id
+      'wbtc' as type, w.id, u.btc_address as user_address, u.evm_address as user_evm_address, w.lock_duration_days, w.timestamp, w.claimed, w.tx_id, w.amount, 'wBTC' as asset, 'EVM Testnet' as network, w.confirmed as status_confirmed, w.btc_price_at_tx, w.claimed_at
     FROM wbtc_transactions w
     JOIN users u ON w.user_id = u.id
     WHERE w.confirmed = FALSE
@@ -178,8 +171,6 @@ export const getUnconfirmedTransactions = async (): Promise<Transaction[]> => {
     network: row.network,
     btcPriceAtTx: parseFloat(row.btc_price_at_tx),
     status: {
-      // @ts-ignore
-      stakeId: row.stake_id,
       confirmed: !!row.status_confirmed,
     },
   }));

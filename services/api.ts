@@ -7,9 +7,17 @@ export const getVaultAddresses = async (): Promise<{ btc: string; evm: string }>
 };
 
 export const getTransactions = async (): Promise<Transaction[]> => {
-  const response = await fetch('/api/transactions');
-  if (!response.ok) throw new Error('Failed to fetch transactions');
-  return response.json();
+  try {
+    const response = await fetch('/api/transactions');
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to fetch transactions');
+    }
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    throw error;
+  }
 };
 
 export const createTransaction = async (

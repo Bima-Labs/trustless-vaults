@@ -2,37 +2,86 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Global animated background */
+:root {
+  --background-light: #ffffff;
+  --background-dark: #111827;
+  --text-light: #1f2937;
+  --text-dark: #f9fafb;
+  --primary-light: #f7931a;
+  --primary-dark: #f7931a;
+  --secondary-light: #f9fafb;
+  --secondary-dark: #1f2937;
+  --accent-light: #e5e7eb;
+  --accent-dark: #374151;
+}
+
 body {
-    background: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #1e3a8a);
-    background-size: 400% 400%;
-    animation: gradientBG 15s ease infinite;
+  background-color: var(--background-light);
+  color: var(--text-light);
 }
 
-@keyframes gradientBG {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
+.dark body {
+  background-color: var(--background-dark);
+  color: var(--text-dark);
 }
 
-/* Animations for modal and table from previous steps */
-.modal-backdrop {
-    animation: fadeIn 0.3s ease-out forwards;
-}
-.modal-content {
-    animation: fadeIn 0.3s ease-out forwards, slideUp 0.3s ease-out forwards;
+.main-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
 }
 
-.admin-table tbody tr:hover {
-    background-color: rgba(75, 85, 99, 0.5); /* Corresponds to gray-600 with opacity */
+.card {
+  background: var(--secondary-light);
+  border-radius: 16px;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--accent-light);
+  padding: 1.5rem;
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+.dark .card {
+  background: var(--secondary-dark);
+  border: 1px solid var(--accent-dark);
 }
 
-@keyframes slideUp {
-    from { transform: translateY(20px); }
-    to { transform: translateY(0); }
+.btn-primary {
+  background-color: var(--primary-light);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  transition: background-color 0.3s ease;
+}
+
+.dark .btn-primary {
+  background-color: var(--primary-dark);
+}
+
+.btn-primary:hover {
+  opacity: 0.8;
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: var(--primary-light);
+  border: 1px solid var(--primary-light);
+  padding: 0.75rem 1.5rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.dark .btn-secondary {
+  color: var(--primary-dark);
+  border: 1px solid var(--primary-dark);
+}
+
+.btn-secondary:hover {
+  background-color: var(--primary-light);
+  color: white;
+}
+
+.dark .btn-secondary:hover {
+  background-color: var(--primary-dark);
+  color: white;
 }
