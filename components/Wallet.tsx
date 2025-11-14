@@ -123,7 +123,7 @@ const Wallet: React.FC<WalletProps> = ({ btcWalletState, setBtcWalletState }) =>
             </button>
           )}
 
-          {isAdmin && (
+          {isMounted && isAdmin && (
             <Link href="/admin" className="btn-primary text-sm">
               Admin
             </Link>

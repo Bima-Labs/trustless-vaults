@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Transaction } from '../types';
 import { claimDividends, getTransactions } from '../services/api';
+import { getBtcTx, getEvmTx } from '../services/explorer';
 import ClaimModal from './ClaimModal';
 import { CheckCircleIcon, ClockIcon, ExternalLinkIcon } from './icons';;
 import { formatLargeNumber, getDurationLabel } from '../lib/format';
@@ -119,15 +120,49 @@ const AdminPanel: React.FC = () => {
   const handleUpdateStatuses = async () => {
     setIsRefreshing(true);
     try {
-      const response = await fetch('/api/transactions/update-status', {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update statuses.');
+      const pendingTxs = transactions.filter(tx => !tx.status.confirmed);
+
+      if (pendingTxs.length === 0) {
+        alert("No pending transactions to update.");
+        setIsRefreshing(false);
+        return;
       }
-      // Re-fetch transactions to show updated statuses
+
+      const confirmationPromises = pendingTxs.map(async (tx) => {
+        let isConfirmed = false;
+        try {
+          if (tx.asset === 'tBTC' && tx.network === 'Bitcoin Testnet') {
+            const btcTxDetails = await getBtcTx(tx.txId);
+            if (btcTxDetails?.status.confirmed) {
+              isConfirmed = true;
+            }
+          } else if (tx.network === 'EVM Testnet') {
+            const evmTxDetails = await getEvmTx(tx.txId);
+            if (evmTxDetails && evmTxDetails.blockNumber && evmTxDetails.isError === '0') {
+              isConfirmed = true;
+            }
+          }
+
+          if (isConfirmed) {
+            const response = await fetch(`/api/transactions/${tx.id}/confirm`, {
+              method: 'POST',
+            });
+            if (!response.ok) {
+              console.error(`Failed to update status for tx: ${tx.id}`);
+            }
+          }
+        } catch (err) {
+          console.error(`Error checking status for tx ${tx.txId}:`, err);
+        }
+      });
+
+      await Promise.all(confirmationPromises);
+
+      // Re-fetch all transactions to show updated statuses
       await fetchTransactions();
+      alert(
+        `Status check complete. Refreshed transaction list.`
+      );
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
       alert(`Error updating statuses: ${errorMessage}`);
